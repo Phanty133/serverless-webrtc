@@ -20,7 +20,7 @@
 <body>
 	<iframe src="http://localhost:5500/peer.html?id=0" id="iframe0"></iframe>
 	<iframe src="http://localhost:5500/peer.html?id=1" id="iframe1"></iframe>
-	<!-- <iframe src="http://localhost:5500/peer.html?id=2" id="iframe2"></iframe> -->
+	<iframe src="http://localhost:5500/peer.html?id=2" id="iframe2"></iframe>
 
 	<script src="./msgHandler.js"></script>
 	<script>
@@ -29,14 +29,14 @@
 		// const iframe2 = document.getElementById("iframe2");
 
 		setTimeout(() => {
-			// iframe0.contentWindow.postMessage("connect-1", "*");
+			iframe0.contentWindow.postMessage("connect-1", "*");
 			// iframe0.contentWindow.postMessage("connect-2", "*");
 			// iframe1.contentWindow.postMessage("connect-2", "*");
 
 			// setTimeout(() => {
 			// 	iframe2.contentWindow.postMessage("send", "*");
 			// }, 500);
-		}, 250);
+		}, 500);
 	</script>
 </body>
 </html>

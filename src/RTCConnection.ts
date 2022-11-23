@@ -33,7 +33,10 @@ export default class RTCConnection {
 
 	opts: RTCConnectionOptions;
 
-	constructor(opts: RTCConnectionOptions) {
+	id: string;
+
+	constructor(id: string, opts: RTCConnectionOptions) {
+		this.id = id;
 		this.opts = opts;
 		this.con = new RTCPeerConnection(RTCConnection.CONN_CONFIG);
 		this.initConnection();
@@ -101,5 +104,9 @@ export default class RTCConnection {
 			// Send answer
 			this.opts.sendSessionCb(this.con.localDescription!);
 		}
+	}
+
+	isOpen() {
+		return this.con.connectionState === "connected";
 	}
 }

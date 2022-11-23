@@ -1,8 +1,7 @@
 import RTCConnection from "./RTCConnection";
 import RTCNetwork from "./RTCNetwork";
 
-const connections: Record<string, RTCConnection> = {};
-const channels: RTCDataChannel[] = [];
+const netw = new RTCNetwork();
 
 let id = "";
 
@@ -20,9 +19,7 @@ function handleMessage(msg: string) {
 		connectTo(msg.split("-")[1]);
 		return;
 	} else if (msg === "send") {
-		for (const ch of channels) {
-			ch.send(`Hello world from ${id}!`);
-		}
+		
 		return;
 	}
 
@@ -33,63 +30,32 @@ function handleMessage(msg: string) {
 
 	if (target !== id) return;
 
-	const data = msgData.data as Record<string, any>;
-
-	if (!(source in connections)) {
-		connections[source] = createConnection(source);
-	}
+	const data = msgData.data as Record<string, any> | null;
 
 	switch (label) {
 		case "session":
-			connections[source].handleSessionDesc(data as RTCSessionDescription);
+			{
+				// Define response functions in case the session description is an offer, rather than an answer
+				const sendSessionHandler = (session: RTCSessionDescriptionInit) => { sendMessage(source, "session", session); };
+				const sendCandidateHandler = (candidate: RTCIceCandidateInit) => { sendMessage(source, "candidate", candidate); };
+
+				netw.handleSessionDesc(data as RTCSessionDescription, sendSessionHandler, sendCandidateHandler);
+			}
 			break;
 		case "candidate":
-			connections[source].addIceCandidate(data as RTCIceCandidate);
+			netw.handleICECandidate(data as RTCIceCandidateInit);
 			break;
 	}
-}
-
-function addChannelListeners(ch: RTCDataChannel) {
-	ch.addEventListener("open", () => {
-		console.log(`channel open (${id}, ${ch.label})`);
-	});
-
-	ch.addEventListener("message", (msgEv) => {
-		console.log(`msg received: ${msgEv.data}`);
-	});
-}
-
-function createConnection(connectionID: string) {
-	const con = new RTCConnection({
-		sendSessionCb: (session: RTCSessionDescription) => { sendMessage(connectionID, "session", session); },
-		sendCandidateCb: (candidate: RTCIceCandidate) => { sendMessage(connectionID, "candidate", candidate); },
-	});
-
-	con.con.addEventListener("datachannel", (e) => {
-		const ch = e.channel;
-		channels.push(ch);
-
-		console.log(`new data channel (${id}, ${ch.label})`);
-
-		addChannelListeners(ch);
-	});
-
-	return con;
 }
 
 function connectTo(connectionID: string) {
-	if (connectionID in connections) {
-		console.warn(`Already conneceted to ${connectionID}! (${id})`);
-		return;
-	}
+	const sendSessionHandler = (session: RTCSessionDescriptionInit) => { sendMessage(connectionID, "session", session); };
+	const sendCandidateHandler = (candidate: RTCIceCandidateInit) => { sendMessage(connectionID, "candidate", candidate); };
 
-	const con = createConnection(connectionID);
-	connections[connectionID] = con;
-
-	const ch = con.con.createDataChannel("test");
-
-	addChannelListeners(ch);
-	channels.push(ch);
+	netw.addForeignPeer(
+		sendSessionHandler,
+		sendCandidateHandler,
+	);
 }
 
 function main() {
@@ -98,9 +64,9 @@ function main() {
 }
 
 function init() {
-	window.onmessage = (e) => {
+	window.addEventListener("message", (e) => {
 		handleMessage(e.data);
-	};
+	});
 
 	if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", main);

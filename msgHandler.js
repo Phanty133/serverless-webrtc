@@ -2,7 +2,7 @@ function broadcastMessage(msg, except) {
 	for (const iframe of document.querySelectorAll("iframe")) {
 		if (iframe.contentWindow === except) continue;
 
-		iframe.contentWindow.postMessage(msg);
+		iframe.contentWindow.postMessage(msg, "*");
 	}
 }
 
