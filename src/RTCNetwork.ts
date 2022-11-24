@@ -1,9 +1,18 @@
 import { v4 as uuidv4 } from "uuid";
 import RTCConnection from "./RTCConnection";
 
-export type SendSessionHandler = (sessionDesc: RTCSessionDescriptionInit) => void;
-export type SendCandidateHandler = (candidate: RTCIceCandidateInit) => void;
-export type RTCConnectionID = string;
+export type SendSessionHandler = (sessionDesc: RTCNetworkConnectionAttemptData) => void;
+export type SendCandidateHandler = (candidate: RTCNetworkConnectionAttemptData) => void;
+
+export type UUIDv4 = string;
+export type RTCConnectionID = UUIDv4;
+export type RTCConnectionAttemptID = UUIDv4;
+
+export interface RTCNetworkConnectionAttemptData {
+	sessionId: RTCConnectionAttemptID;
+	type: "SESSION" | "ICE_CANDIDATE";
+	payload: RTCSessionDescriptionInit | RTCIceCandidateInit;
+}
 
 export default class RTCNetwork {
 	// Every peer has a UUIDv4 assigned to them when they connect
@@ -12,43 +21,67 @@ export default class RTCNetwork {
 	// Data channels used for connecting new peers
 	conRelayChannels: Record<RTCConnectionID, RTCDataChannel> = {};
 
-	// The connection that was created from an offer and is gathering ICE candidates
-	activeConnection: RTCConnection | null = null;
+	// Connections that haven't been established yet
+	activeConnections: Record<RTCConnectionAttemptID, RTCConnection> = {};
 
-	constructor() {
-		
-	}
+	constructor() {}
 
 	// Create the connection and set it as the active connection
 	private createNewConnection(
 		sendSessionHandler: SendSessionHandler,
-		sendCandidateHandler: SendCandidateHandler
+		sendCandidateHandler: SendCandidateHandler,
+		offerAttemptId: RTCConnectionAttemptID | null = null
 	): RTCConnection {
-		const con = new RTCConnection(uuidv4(), {
-			sendSessionCb: sendSessionHandler,
-			sendCandidateCb: sendCandidateHandler
-		});
+		const con = new RTCConnection(uuidv4());
+		const attemptId = this.setActiveConnection(con, offerAttemptId);
 
-		if (this.setActiveConnection(con)) {
+		if (attemptId) {
+			con.setOptions({
+				sendSessionCb: (session: RTCSessionDescription) => {
+					sendSessionHandler({
+						sessionId: attemptId,
+						type: "SESSION",
+						payload: session,
+					});
+				},
+				sendCandidateCb: (candidate: RTCIceCandidate) => {
+					sendCandidateHandler({
+						sessionId: attemptId,
+						type: "ICE_CANDIDATE",
+						payload: candidate,
+					});
+				}
+			});
+
 			this.connections[con.id] = con;
 		}
 
 		return con;
 	}
 
-	// Returns false if failed to set active - if there's an existing active connection
-	private setActiveConnection(con: RTCConnection): boolean {
-		if (this.activeConnection !== null) {
-			console.warn("Attempt to set a new active connection without completing the previous connection!");
-			return false;
+	private getAttemptIDFromActiveConnection(con: RTCConnection): RTCConnectionAttemptID | null {
+		for (const [k, v] of Object.entries(this.activeConnections)) {
+			if (v.id === con.id) return k;
 		}
 
-		this.activeConnection = con;
+		return null;
+	}
+
+	// Returns false if failed to set active - if there's an existing active connection
+	private setActiveConnection(con: RTCConnection, sesId: RTCConnectionAttemptID | null = null): RTCConnectionAttemptID | null {
+		if (sesId !== null && sesId in this.activeConnections) {
+			console.warn("Attempt to set a duplicate active connection ID without completing the previous connection!");
+			return null;
+		}
+
+		const id = sesId === null ? uuidv4() : sesId;
+
+		this.activeConnections[id] = con;
 
 		// When all candidates gathered, reset state
 		const gatheringStateHandler = () => {
-			if (con.con.iceGatheringState === "complete" && this.activeConnection === con) {
-				this.activeConnection = null;
+			if (con.con.iceGatheringState === "complete") {
+				delete this.activeConnections[id];
 				con.con.removeEventListener("iceconnectionstatechange", gatheringStateHandler);
 			}
 		};
@@ -57,14 +90,14 @@ export default class RTCNetwork {
 
 		// When active connection completed, reset state
 		const connectionStateHandler = () => {
-			if (con.con.connectionState === "connected" && this.activeConnection === con) {
-				this.activeConnection = null;
+			if (con.con.connectionState === "connected") {
+				delete this.activeConnections[id];
 			}
 		};
 
 		con.con.addEventListener("connectionstatechange", connectionStateHandler);
 
-		return true;
+		return id;
 	}
 
 	private addRelayDataChannel(con: RTCConnection, channel: RTCDataChannel | null = null) {
@@ -95,20 +128,21 @@ export default class RTCNetwork {
 		this.addRelayDataChannel(con);
 	}
 
-	async handleSessionDesc(
+	private async handleSessionDesc(
+		attemptId: RTCConnectionAttemptID,
 		session: RTCSessionDescriptionInit,
 		sendSessionHandler: SendSessionHandler,
 		sendCandidateHandler: SendCandidateHandler
 	) {
 		// If the active connection is null, we have received a new connection offer
-		if (this.activeConnection === null) {
+		if (!(attemptId in this.activeConnections)) {
 			if (session.type === "answer") {
 				console.warn("Atttempt to handle an answer without an active connection!");
-				return;	
+				return;
 			}
 
 			// Create a new connection
-			const con = this.createNewConnection(sendSessionHandler, sendCandidateHandler);
+			const con = this.createNewConnection(sendSessionHandler, sendCandidateHandler, attemptId);
 
 			con.handleSessionDesc(session);
 
@@ -125,17 +159,37 @@ export default class RTCNetwork {
 				ch.addEventListener("open", relayChannelListener);
 			});
 		} else {
-			await this.activeConnection.handleSessionDesc(session);
+			await this.activeConnections[attemptId].handleSessionDesc(session);
 		}
 	}
 
-	async handleICECandidate(candidate: RTCIceCandidateInit) {
-		if (this.activeConnection === null) {
+	private async handleICECandidate(
+		attemptId: RTCConnectionAttemptID,
+		candidate: RTCIceCandidateInit
+	) {
+		if (!(attemptId in this.activeConnections)) {
 			console.warn("Attempt to add candidate without an active connection");
 			return;
 		}
 
-		this.activeConnection.addIceCandidate(candidate);
+		this.activeConnections[attemptId].addIceCandidate(candidate);
+	}
+
+	async handleIncomingData(
+		data: RTCNetworkConnectionAttemptData,
+		sendSessionHandler: SendSessionHandler,
+		sendCandidateHandler: SendCandidateHandler
+	) {
+		switch (data.type) {
+			case "SESSION":
+				this.handleSessionDesc(data.sessionId, data.payload as RTCSessionDescription, sendSessionHandler, sendCandidateHandler);
+				break;
+			case "ICE_CANDIDATE":
+				this.handleICECandidate(data.sessionId, data.payload as RTCIceCandidate)
+				break;
+			default:
+				console.warn("Attempt to handle data of unknown type!");
+		}
 	}
 
 	// Add a peer that is connected to another already connected peer

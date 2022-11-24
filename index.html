@@ -30,8 +30,8 @@
 
 		setTimeout(() => {
 			iframe0.contentWindow.postMessage("connect-1", "*");
-			// iframe0.contentWindow.postMessage("connect-2", "*");
-			// iframe1.contentWindow.postMessage("connect-2", "*");
+			iframe0.contentWindow.postMessage("connect-2", "*");
+			iframe1.contentWindow.postMessage("connect-2", "*");
 
 			// setTimeout(() => {
 			// 	iframe2.contentWindow.postMessage("send", "*");

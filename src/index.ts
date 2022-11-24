@@ -1,5 +1,5 @@
 import RTCConnection from "./RTCConnection";
-import RTCNetwork from "./RTCNetwork";
+import RTCNetwork, { RTCNetworkConnectionAttemptData } from "./RTCNetwork";
 
 const netw = new RTCNetwork();
 
@@ -30,27 +30,23 @@ function handleMessage(msg: string) {
 
 	if (target !== id) return;
 
-	const data = msgData.data as Record<string, any> | null;
+	const data = (msgData.data ?? null) as RTCNetworkConnectionAttemptData | null;
 
-	switch (label) {
-		case "session":
-			{
-				// Define response functions in case the session description is an offer, rather than an answer
-				const sendSessionHandler = (session: RTCSessionDescriptionInit) => { sendMessage(source, "session", session); };
-				const sendCandidateHandler = (candidate: RTCIceCandidateInit) => { sendMessage(source, "candidate", candidate); };
-
-				netw.handleSessionDesc(data as RTCSessionDescription, sendSessionHandler, sendCandidateHandler);
-			}
-			break;
-		case "candidate":
-			netw.handleICECandidate(data as RTCIceCandidateInit);
-			break;
+	if (data === null) {
+		console.warn("Attempt to handle empty data!");
+		return;
 	}
+
+	// Define response functions in case the session description is an offer, rather than an answer
+	const sendSessionHandler = (session: RTCNetworkConnectionAttemptData) => { sendMessage(source, "session", session); };
+	const sendCandidateHandler = (candidate: RTCNetworkConnectionAttemptData) => { sendMessage(source, "candidate", candidate); };
+
+	netw.handleIncomingData(data, sendSessionHandler, sendCandidateHandler);
 }
 
 function connectTo(connectionID: string) {
-	const sendSessionHandler = (session: RTCSessionDescriptionInit) => { sendMessage(connectionID, "session", session); };
-	const sendCandidateHandler = (candidate: RTCIceCandidateInit) => { sendMessage(connectionID, "candidate", candidate); };
+	const sendSessionHandler = (session: RTCNetworkConnectionAttemptData) => { sendMessage(connectionID, "session", session); };
+	const sendCandidateHandler = (candidate: RTCNetworkConnectionAttemptData) => { sendMessage(connectionID, "candidate", candidate); };
 
 	netw.addForeignPeer(
 		sendSessionHandler,

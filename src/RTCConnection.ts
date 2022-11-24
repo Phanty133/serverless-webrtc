@@ -35,9 +35,18 @@ export default class RTCConnection {
 
 	id: string;
 
-	constructor(id: string, opts: RTCConnectionOptions) {
+	constructor(id: string, opts?: RTCConnectionOptions) {
 		this.id = id;
-		this.opts = opts;
+
+		if (opts) {
+			this.opts = opts;
+		} else {
+			this.opts = {
+				sendSessionCb: () => { console.warn("sendSessionCb not set!"); },
+				sendCandidateCb: () => { console.warn("sendCandidateCb not set!"); },
+			}
+		}
+
 		this.con = new RTCPeerConnection(RTCConnection.CONN_CONFIG);
 		this.initConnection();
 	}
@@ -108,5 +117,9 @@ export default class RTCConnection {
 
 	isOpen() {
 		return this.con.connectionState === "connected";
+	}
+
+	setOptions(opts: RTCConnectionOptions) {
+		this.opts = opts;
 	}
 }
