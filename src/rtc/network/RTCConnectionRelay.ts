@@ -1,11 +1,12 @@
 import { RelayMessage, RelayMessageType, RTCManagementChannelState } from "../management/RTCManagementChannel";
 import RTCManagementChannelMessageEvent from "../management/RTCManagementChannelMessageEvent";
-import RTCNetwork, { NodeId } from "./RTCNetwork";
+import RTCNetworkNode from "../node/RTCNetworkNode";
+import RTCNetwork, { NodeId, RTCConnectionPacket } from "./RTCNetwork";
 import RTCNetworkPeerEvent from "./RTCNetworkPeerEvent";
 
 // Handles all the connection relay logic
 export default class RTCConnectionRelay {
-	netw: RTCNetwork;
+	readonly netw: RTCNetwork;
 
 	constructor(netw: RTCNetwork) {
 		this.netw = netw;
@@ -45,12 +46,43 @@ export default class RTCConnectionRelay {
 	}
 
 	private onRelayMessage(msg: RelayMessage<any>) {
-		if (msg.type === RelayMessageType.NEW_PEER) {
-			this.onRelayNewPeer(msg);
+		switch (msg.type) {
+			case RelayMessageType.NEW_PEER:
+				this.onRelayNewPeer(msg);
+				break;
+			case RelayMessageType.CONN_PACKET:
+				this.onRelayConnPacket(msg);
+				break;
 		}
 	}
 
+	private msgTransportFactory(relayNode: RTCNetworkNode, target: NodeId) {
+		return (packet: RTCConnectionPacket) => {
+			relayNode.management.send({
+				type: RelayMessageType.CONN_PACKET,
+				source: this.netw.local.id,
+				relayVia: relayNode.id,
+				target,
+				payload: packet
+			});
+		};
+	}
+
 	private onRelayNewPeer(msg: RelayMessage<NodeId>) {
-		console.log(msg);
+		const newPeerId = msg.payload;
+
+		if (this.netw.getNodeById(newPeerId) !== null) {
+			// The node has already been added
+			return;
+		}
+
+		const relayNode = this.netw.getNodeById(msg.source)!;
+		this.netw.addForeignPeer(this.msgTransportFactory(relayNode, newPeerId));
+	}
+
+	private onRelayConnPacket(msg: RelayMessage<RTCConnectionPacket>) {
+		const relayNode = msg.relayVia === null ? this.netw.getNodeById(msg.source) : this.netw.getNodeById(msg.relayVia);
+
+		this.netw.handleIncomingPacket(msg.payload, this.msgTransportFactory(relayNode!, msg.source));
 	}
 }

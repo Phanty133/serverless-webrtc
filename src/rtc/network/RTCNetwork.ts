@@ -77,6 +77,7 @@ export default class RTCNetwork extends CustomEventTarget<RTCNetworkEvents> {
 
 			const msg: RelayMessage<T> = {
 				type,
+				source: this.local.id,
 				target: node.id,
 				relayVia: null,
 				payload

@@ -1,7 +1,7 @@
 import CustomEventTarget from "../../events/CustomEventTarget";
 import RTCConnection, { RTCConnectionState } from "../connection/RTCConnection";
 import RTCConnectionStateEvent from "../connection/RTCConnectionStateEvent";
-import RTCNetwork from "../network/RTCNetwork";
+import RTCNetwork, { NodeId } from "../network/RTCNetwork";
 import RTCNetworkNode from "../node/RTCNetworkNode";
 import RTCNode, { UUIDv4 } from "../node/RTCNode";
 import RTCManagementChannelMessageEvent from "./RTCManagementChannelMessageEvent";
@@ -16,12 +16,14 @@ export enum RTCManagementChannelState {
 
 export enum RelayMessageType {
 	NEW_PEER,
+	CONN_PACKET,
 };
 
 export interface RelayMessage<TPayload> {
 	type: RelayMessageType,
-	target: UUIDv4, // Ultimate target
-	relayVia: UUIDv4 | null, // Relay peer ID
+	source: NodeId,
+	target: NodeId, // Ultimate target
+	relayVia: NodeId | null, // Relay peer ID
 	payload: TPayload
 }
 
@@ -118,7 +120,9 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 	}
 
 	private onMessage(msg: RelayMessage<any>) {
-		if (msg.relayVia === this.netw.local.id) {
+		if (msg.target === this.netw.local.id) {
+			this.dispatchEvent(new RTCManagementChannelMessageEvent(msg));
+		} else if (msg.relayVia === this.netw.local.id) {
 			const targetNode = this.netw.getNodeById(msg.target);
 
 			if (targetNode === null) {
@@ -127,8 +131,6 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 			}
 
 			targetNode.management.send(msg);
-		} else if (msg.target === this.netw.local.id) {
-			this.dispatchEvent(new RTCManagementChannelMessageEvent(msg));
 		} else {
 			console.warn(`Failed to relay message: Received stray message! (Relay: ${msg.relayVia}, Target: ${msg.target})`);
 		}
