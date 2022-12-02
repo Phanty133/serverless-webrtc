@@ -29,9 +29,16 @@
 		// const iframe2 = document.getElementById("iframe2");
 
 		setTimeout(() => {
-			iframe0.contentWindow.postMessage("connect-1", "*");
-			iframe0.contentWindow.postMessage("connect-2", "*");
-			iframe1.contentWindow.postMessage("connect-2", "*");
+			const con1 = {
+				source: "-1",
+				data: "1",
+				label: "connect",
+				target: "0",
+			};
+			
+			iframe0.contentWindow.postMessage(JSON.stringify(con1), "*");
+			// iframe0.contentWindow.postMessage("connect-2", "*");
+			// iframe1.contentWindow.postMessage("connect-2", "*");
 
 			// setTimeout(() => {
 			// 	iframe2.contentWindow.postMessage("send", "*");

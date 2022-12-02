@@ -1,69 +1,48 @@
-import RTCConnection from "./RTCConnection";
-import RTCNetwork, { RTCNetworkConnectionAttemptData } from "./RTCNetwork";
+import RTCNetwork, { RTCConnectionPacket } from "./rtc/network/RTCNetwork";
+import Messaging from "./messaging/Messaging";
+import MessagingEvent from "./messaging/MessagingEvent";
 
-const netw = new RTCNetwork();
-
-let id = "";
-
-function sendMessage(target:string, label: string, data: any) {
-	window.top!.postMessage(JSON.stringify({
-		source: id,
-		target,
-		label,
-		data
-	}), "*");
-}
-
-function handleMessage(msg: string) {
-	if (msg.startsWith("connect")) {
-		connectTo(msg.split("-")[1]);
-		return;
-	} else if (msg === "send") {
-		
-		return;
+const netw = new RTCNetwork({
+	connection: {
+		iceServers: [
+			{
+				urls: "stun:openrelay.metered.ca:80",
+			},
+		]
 	}
+});
+let messaging: Messaging;
 
-	const msgData = JSON.parse(msg);
-	const label = msgData.label as string;
-	const target = msgData.target as string;
-	const source = msgData.source as string;
-
-	if (target !== id) return;
-
-	const data = (msgData.data ?? null) as RTCNetworkConnectionAttemptData | null;
+function msgHandler(ev: MessagingEvent) {
+	const { source, data } = ev.detail;
 
 	if (data === null) {
 		console.warn("Attempt to handle empty data!");
 		return;
 	}
 
-	// Define response functions in case the session description is an offer, rather than an answer
-	const sendSessionHandler = (session: RTCNetworkConnectionAttemptData) => { sendMessage(source, "session", session); };
-	const sendCandidateHandler = (candidate: RTCNetworkConnectionAttemptData) => { sendMessage(source, "candidate", candidate); };
+	if (source === "-1") {
+		connectTo(data);
+		return;
+	}
 
-	netw.handleIncomingData(data, sendSessionHandler, sendCandidateHandler);
+	const msgTransport = (packet: RTCConnectionPacket) => { messaging.send(source, JSON.stringify(packet)); };
+	netw.handleIncomingPacket(JSON.parse(data), msgTransport);
 }
 
 function connectTo(connectionID: string) {
-	const sendSessionHandler = (session: RTCNetworkConnectionAttemptData) => { sendMessage(connectionID, "session", session); };
-	const sendCandidateHandler = (candidate: RTCNetworkConnectionAttemptData) => { sendMessage(connectionID, "candidate", candidate); };
-
-	netw.addForeignPeer(
-		sendSessionHandler,
-		sendCandidateHandler,
-	);
+	const msgTransport = (packet: RTCConnectionPacket) => { messaging.send(connectionID, JSON.stringify(packet)); };
+	netw.addForeignPeer(msgTransport);
 }
 
 function main() {
 	const params = new URLSearchParams(location.search);
-	id = params.get("id")!;
+	messaging = new Messaging(params.get("id")!);
+
+	messaging.addEventListener("message", msgHandler as EventListener);
 }
 
 function init() {
-	window.addEventListener("message", (e) => {
-		handleMessage(e.data);
-	});
-
 	if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", main);
 	} else {
