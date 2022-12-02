@@ -1,5 +1,6 @@
 import RTCConnection, { RTCConnectionHandlers } from "../connection/RTCConnection";
 import RTCManagementChannel from "../management/RTCManagementChannel";
+import RTCNetwork from "../network/RTCNetwork";
 import RTCNetworkNodeStateEvent from "./RTCNetworkNodeStateEvent";
 import RTCNode, { UUIDv4 } from "./RTCNode";
 
@@ -21,11 +22,11 @@ export default class RTCNetworkNode extends RTCNode {
 		return this._state;
 	}
 
-	constructor(config: RTCConfiguration, handlers: RTCConnectionHandlers, id: UUIDv4 | null = null) {
+	constructor(network: RTCNetwork, config: RTCConfiguration, handlers: RTCConnectionHandlers, id: UUIDv4 | null = null) {
 		super(id);
 
 		this.con = new RTCConnection(config, handlers);
-		this.management = new RTCManagementChannel(this.con);
+		this.management = new RTCManagementChannel(this, network);
 		this._state = RTCNetworkNodeState.NEW;
 		this.initListeners();
 	}

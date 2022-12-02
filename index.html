@@ -29,16 +29,30 @@
 		// const iframe2 = document.getElementById("iframe2");
 
 		setTimeout(() => {
-			const con1 = {
+			const con1 = { // connect 0 to 1
 				source: "-1",
 				data: "1",
 				label: "connect",
 				target: "0",
 			};
+
+			const con2 = { // connect 0 to 2
+				source: "-1",
+				data: "2",
+				label: "connect",
+				target: "0",
+			};
+
+			const con3 = { // connect 1 to 2
+				source: "-1",
+				data: "2",
+				label: "connect",
+				target: "1",
+			};
 			
 			iframe0.contentWindow.postMessage(JSON.stringify(con1), "*");
-			// iframe0.contentWindow.postMessage("connect-2", "*");
-			// iframe1.contentWindow.postMessage("connect-2", "*");
+			iframe0.contentWindow.postMessage(JSON.stringify(con2), "*");
+			// iframe1.contentWindow.postMessage(JSON.stringify(con3), "*");
 
 			// setTimeout(() => {
 			// 	iframe2.contentWindow.postMessage("send", "*");

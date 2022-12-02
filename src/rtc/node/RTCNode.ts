@@ -7,10 +7,15 @@ export type UUIDv4 = string;
 type RTCNodeEvents = { "state": RTCNetworkNodeStateEvent };
 
 export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
-	id: UUIDv4;
+	private _id: UUIDv4;
+	get id() { return this._id; }
 
 	constructor(id: UUIDv4 | null = null) {
 		super();
-		this.id = id === null ? uuidv4() : id;
+		this._id = id === null ? uuidv4() : id;
+	}
+
+	setId(newId: UUIDv4) {
+		this._id = newId;
 	}
 }

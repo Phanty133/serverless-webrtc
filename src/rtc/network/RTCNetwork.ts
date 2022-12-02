@@ -1,7 +1,11 @@
 import { v4 as uuidv4 } from "uuid";
+import CustomEventTarget from "../../events/CustomEventTarget";
+import { RelayMessage, RelayMessageType, RTCManagementChannelState } from "../management/RTCManagementChannel";
 import RTCNetworkNode, { RTCNetworkNodeState } from "../node/RTCNetworkNode";
 import RTCNetworkNodeStateEvent from "../node/RTCNetworkNodeStateEvent";
 import RTCNode from "../node/RTCNode";
+import RTCConnectionRelay from "./RTCConnectionRelay";
+import RTCNetworkPeerEvent from "./RTCNetworkPeerEvent";
 
 export type UUIDv4 = string;
 export type NodeId = UUIDv4;
@@ -20,23 +24,31 @@ export interface RTCConnectionPacket {
 	payload: RTCSessionDescriptionInit | RTCIceCandidateInit;
 }
 
-export default class RTCNetwork extends EventTarget {
-	local: RTCNode;
+type RTCNetworkEvents = {
+	"peer": RTCNetworkPeerEvent
+};
+
+export default class RTCNetwork extends CustomEventTarget<RTCNetworkEvents> {
+	readonly local: RTCNode;
 
 	nodes: RTCNetworkNode[] = [];
 
-	config: RTCNetworkConfig;
+	readonly config: RTCNetworkConfig;
 
 	connectingNodes: Record<ConnectionId, RTCNetworkNode> = {};
+
+	readonly relay: RTCConnectionRelay;
 
 	constructor(config: RTCNetworkConfig) {
 		super();
 		this.config = config;
 		this.local = new RTCNode();
+		this.relay = new RTCConnectionRelay(this);
 	}
 
 	addForeignPeer(transport: MessageTransport) {
 		const conId = uuidv4();
+		// The node has a temporary ID until we receive a session desc answer
 		const node = this.createNetworkNode(transport, conId);
 
 		node.ensureManagementChannel();
@@ -55,9 +67,28 @@ export default class RTCNetwork extends EventTarget {
 		}
 	}
 
+	getNodeById(id: NodeId) {
+		return this.nodes.find((n) => n.id === id) ?? null;
+	}
+
+	broadcastManagement<T>(type: RelayMessageType, payload: T, ignoreNode: NodeId | null = null) {
+		for (const node of this.nodes) {
+			if (node.id === ignoreNode) continue;
+
+			const msg: RelayMessage<T> = {
+				type,
+				target: node.id,
+				relayVia: null,
+				payload
+			};
+
+			node.management.send(msg);
+		}
+	}
+
 	// Creates the node and adds it to connectingNodes
 	private createNetworkNode(transport: MessageTransport, conId: ConnectionId, nodeId: NodeId | null = null): RTCNetworkNode {
-		const node = new RTCNetworkNode(this.config.connection, {
+		const node = new RTCNetworkNode(this, this.config.connection, {
 			sendSessionCb: (session: RTCSessionDescription) => {
 				transport({
 					sourceNode: this.local.id,
@@ -80,8 +111,23 @@ export default class RTCNetwork extends EventTarget {
 
 		node.addEventListener("state", (e: RTCNetworkNodeStateEvent) => {
 			if (e.detail === RTCNetworkNodeState.CONNECTED) {
-				this.nodes.push(node);
-				delete this.connectingNodes[conId];
+				const nodeReadyCb = () => {
+					this.nodes.push(node);
+					delete this.connectingNodes[conId];
+
+					this.dispatchEvent(new RTCNetworkPeerEvent(node.id));
+				};
+
+				// Add the node to the active pool only when the management channel is open
+				if (node.management.state === RTCManagementChannelState.OPEN) {
+					nodeReadyCb();
+				} else {
+					node.management.addEventListener("state", (e) => {
+						if (e.detail === RTCManagementChannelState.OPEN) {
+							nodeReadyCb();
+						}
+					});
+				}
 			}
 		});
 
@@ -106,6 +152,8 @@ export default class RTCNetwork extends EventTarget {
 			const node = this.createNetworkNode(transport, connectionId, sourceNode);
 			node.con.handleSessionDesc(session);
 		} else {
+			// When receiving the answer, update the node's temporary ID
+			this.connectingNodes[connectionId].setId(packet.sourceNode);
 			await this.connectingNodes[connectionId].con.handleSessionDesc(session);
 		}
 	}
