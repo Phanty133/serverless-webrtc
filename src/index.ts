@@ -42,19 +42,6 @@ async function main() {
 	messaging.addEventListener("message", msgHandler as EventListener);
 
 	console.log(`Iframe ${messaging.id}, ID: ${netw.local.id}`);
-
-	netw.local.addEventListener("ipfsinit", async (e) => {
-		console.log(`IPFS ID: ${e.detail}`);
-
-		await netw.local.ipfs!.swarm.connect((await netw.local.ipfs!.id()).id);
-		await netw.local.subIPFSRTC();
-
-		setTimeout(() => {
-			if (messaging.id === "0") {
-				netw.local.sendToIPFSRTC("Hello world!");
-			}
-		}, 3000);
-	});
 }
 
 function init() {

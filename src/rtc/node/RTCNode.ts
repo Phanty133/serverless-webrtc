@@ -1,74 +1,99 @@
 import { v4 as uuidv4 } from "uuid";
-import * as IPFS from "ipfs-core";
+import { ArrayBufferUtils } from "../../utils/ArrayBufferUtils";
 import CustomEventTarget from "../../events/CustomEventTarget";
 import RTCNetworkNodeStateEvent from "./RTCNetworkNodeStateEvent";
-import RTCNodeIPFSInitEvent from "./RTCNodeIPFSInitEvent";
+import RTCNodeKeygenEvent from "./RTCNodeKeygenEvent";
 
 export type UUIDv4 = string;
-export type IPFSID = string;
 
 type RTCNodeEvents = {
 	"state": RTCNetworkNodeStateEvent,
-	"ipfsinit": RTCNodeIPFSInitEvent
+	"keygen": RTCNodeKeygenEvent
 };
 
 export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
+	static KEY_ALG = "RSASSA-PKCS1-v1_5";
+
 	private _id: UUIDv4;
+	private _pubkey: CryptoKey | null = null;
+	private keypair: CryptoKeyPair | null = null;
+
 	get id() { return this._id; }
+	get pubkey() {
+		return this.keypair === null ? this._pubkey : this.keypair.publicKey;
+	}
 
-	ipfs: IPFS.IPFS | null = null;
-	readonly ipfsTopic: string;
-
-	constructor(id: UUIDv4 | null = null, ipfsTopic = "__rtc-ipfstransport") {
+	constructor(id: UUIDv4 | null = null, genKeys = false) {
 		super();
 		this._id = id === null ? uuidv4() : id;
-		this.ipfsTopic = ipfsTopic;
-		this.initIpfs();
-	}
 
-	private async initIpfs() {
-		this.ipfs = await IPFS.create();
-		const id = await this.getIPFSID();
-
-		this.dispatchEvent<"ipfsinit">(new RTCNodeIPFSInitEvent(id!));
-	}
-
-	async subIPFSRTC() {
-		if (this.ipfs === null) {
-			console.warn("Unable to subscribe to IPFS PubSub. IPFS not initialized!");
-			return null;
-		}
-
-		await this.ipfs.pubsub.subscribe(this.ipfsTopic, (msg) => {
-			const textDec = new TextDecoder();
-			this.onPubSubMessage(textDec.decode(msg.data));
-		});
-	}
-
-	async sendToIPFSRTC(msg: string) {
-		if (this.ipfs === null) {
-			console.warn("Unable to send to IPFS PubSub. IPFS not initialized!");
-			return null;
-		}
-
-		const textEnc = new TextEncoder();
-		await this.ipfs.pubsub.publish(this.ipfsTopic, textEnc.encode(msg));
-	}
-
-	private onPubSubMessage(msg: string) {
-		console.log(`New IPFS message: ${msg} (ID: ${this.id})`);
-	}
-
-	async getIPFSID() {
-		if (this.ipfs === null) {
-			console.warn("Unable to get IPFS ID. IPFS not initialized!");
-			return null;
-		}
-
-		return (await this.ipfs.id()).id.toString();
+		if (genKeys) this.genKeys();
 	}
 
 	setId(newId: UUIDv4) {
 		this._id = newId;
+	}
+
+	async setPublicKey(key: string) {
+		this._pubkey = await window.crypto.subtle.importKey(
+			"raw",
+			ArrayBufferUtils.hex2buf(key),
+			{ name: RTCNode.KEY_ALG, hash: "SHA-256" },
+			false,
+			["verify"]
+		);
+	}
+	
+	async genKeys() {
+		this.keypair = await window.crypto.subtle.generateKey(
+			{
+				name: RTCNode.KEY_ALG,
+				modulusLength: 4096,
+				publicExponent: new Uint8Array([1, 0, 1]),
+				hash: "SHA-256"
+			},
+			true,
+			["sign", "verify"]
+		);
+
+		this.dispatchEvent<"keygen">(new RTCNodeKeygenEvent());
+	}
+
+	async sign(data: string) {
+		if (this.keypair === null) {
+			console.warn("Attempt to sign data before generating a key pair!");
+			return;
+		}
+
+		const sig = await window.crypto.subtle.sign(
+			RTCNode.KEY_ALG,
+			this.keypair.privateKey,
+			ArrayBufferUtils.str2buf(data)
+		);
+
+		return ArrayBufferUtils.buf2hex(sig);
+	}
+
+	async verify(sig: string, data: string) {
+		if (this.pubkey === null) {
+			console.warn("Attempt to verify data before generating or assigning a public key!");
+			return;
+		}
+
+		return window.crypto.subtle.verify(
+			RTCNode.KEY_ALG,
+			this.pubkey,
+			ArrayBufferUtils.str2buf(sig),
+			ArrayBufferUtils.str2buf(data)
+		);
+	}
+
+	async exportPubKey() {
+		if (this.pubkey === null) {
+			console.warn("Attempt to export pubkey before generating or assigning a public key!");
+			return;
+		}
+
+		return ArrayBufferUtils.buf2hex(await window.crypto.subtle.exportKey("raw", this.pubkey));
 	}
 }
