@@ -1,9 +1,8 @@
-import CustomEventTarget from "../../events/CustomEventTarget";
+import CustomEventTarget, { CustomEventList } from "../../events/CustomEventTarget";
 import RTCConnection, { RTCConnectionState } from "../connection/RTCConnection";
 import RTCConnectionStateEvent from "../connection/RTCConnectionStateEvent";
 import RTCNetwork, { NodeId } from "../network/RTCNetwork";
 import RTCNetworkNode from "../node/RTCNetworkNode";
-import RTCNode, { UUIDv4 } from "../node/RTCNode";
 import RTCManagementChannelMessageEvent from "./RTCManagementChannelMessageEvent";
 import RTCManagementChannelStateEvent from "./RTCManagementChannelStateEvent";
 
@@ -14,23 +13,27 @@ export enum RTCManagementChannelState {
 	BROKEN
 }
 
-export enum RelayMessageType {
+export enum ManagementMessageType {
 	NEW_PEER,
 	CONN_PACKET,
+	PEER_INFO,
+	DECISION_ATTEMPT,
+	DECISION_RESPONSE,
+	DECISION_ACTION
 };
 
-export interface RelayMessage<TPayload> {
-	type: RelayMessageType,
-	source: NodeId,
-	target: NodeId, // Ultimate target
-	relayVia: NodeId | null, // Relay peer ID
+export interface ManagementMessage<TPayload> {
+	type: ManagementMessageType
+	source: NodeId
+	target: NodeId // Ultimate target
+	relayVia: NodeId | null // Relay peer ID
 	payload: TPayload
 }
 
-export type RTCManagementChannelEvents = {
-	"state": RTCManagementChannelStateEvent,
-	"message": RTCManagementChannelMessageEvent,
-}
+interface RTCManagementChannelEvents extends CustomEventList {
+	"state": RTCManagementChannelStateEvent
+	"message": RTCManagementChannelMessageEvent
+};
 
 export default class RTCManagementChannel extends CustomEventTarget<RTCManagementChannelEvents> {
 	readonly node: RTCNetworkNode;
@@ -41,13 +44,13 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 
 	readonly label: string;
 
-	private channelListenerCb = (e: RTCDataChannelEvent) => { this.channelEvListener(e); };
+	private readonly channelListenerCb = (e: RTCDataChannelEvent): void => { this.channelEvListener(e); };
 
 	private _state: RTCManagementChannelState;
 
-	private con: RTCConnection;
+	private readonly con: RTCConnection;
 
-	get state() {
+	get state(): RTCManagementChannelState {
 		return this._state;
 	}
 
@@ -62,7 +65,7 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 		this.initConnection();
 	}
 
-	private channelEvListener(e: RTCDataChannelEvent) {
+	private channelEvListener(e: RTCDataChannelEvent): void {
 		const ch = e.channel;
 
 		if (ch.label === this.label) {
@@ -70,11 +73,11 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 
 			ch.addEventListener("open", () => { this.onChannelOpen(); });
 		}
-		
+
 		this.con.con.removeEventListener("datachannel", this.channelListenerCb);
 	}
 
-	private initConnection() {
+	private initConnection(): void {
 		this.con.con.addEventListener("datachannel", this.channelListenerCb);
 
 		this.con.addEventListener("state", (e: RTCConnectionStateEvent) => {
@@ -84,22 +87,22 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 		});
 	}
 
-	private initChannel() {
+	private initChannel(): void {
 		if (this.ch === null) {
 			console.warn("Attempt to initialize a null channel!");
 			return;
 		}
 
-		this.ch.addEventListener("close", () => { this.setState(RTCManagementChannelState.BROKEN) });
-		this.ch.addEventListener("closing", () => { this.setState(RTCManagementChannelState.BROKEN) });
+		this.ch.addEventListener("close", () => { this.setState(RTCManagementChannelState.BROKEN); });
+		this.ch.addEventListener("closing", () => { this.setState(RTCManagementChannelState.BROKEN); });
 
 		this.ch.addEventListener("message", (e) => {
-			let data: RelayMessage<any>;
+			let data: ManagementMessage<any>;
 
 			try {
 				data = JSON.parse(e.data);
 			} catch (err) {
-				console.warn(`Received invalid relay data: ${e.data}`);
+				console.warn(`Received invalid relay data: ${JSON.stringify(e.data)}`);
 				return;
 			}
 
@@ -107,19 +110,24 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 		});
 	}
 
-	private onChannelOpen() {
+	private onChannelOpen(): void {
+		if (this.ch === null) {
+			console.warn("Illegal onChannelOpen");
+			return;
+		}
+
 		this.initChannel();
 
 		this.setState(RTCManagementChannelState.OPEN);
-		this.ch!.send("Hello world!");
+		this.ch.send("Hello world!");
 	}
 
-	private setState(newState: RTCManagementChannelState) {
+	private setState(newState: RTCManagementChannelState): void {
 		this._state = newState;
 		this.dispatchEvent(new RTCManagementChannelStateEvent(newState));
 	}
 
-	private onMessage(msg: RelayMessage<any>) {
+	private onMessage(msg: ManagementMessage<any>): void {
 		if (msg.target === this.netw.local.id) {
 			this.dispatchEvent(new RTCManagementChannelMessageEvent(msg));
 		} else if (msg.relayVia === this.netw.local.id) {
@@ -132,11 +140,11 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 
 			targetNode.management.send(msg);
 		} else {
-			console.warn(`Failed to relay message: Received stray message! (Relay: ${msg.relayVia}, Target: ${msg.target})`);
+			console.warn(`Failed to relay message: Received stray message! (Relay: ${msg.relayVia ?? "None"}, Target: ${msg.target})`);
 		}
 	}
 
-	open() {
+	open(): void {
 		if (this.ch !== null) {
 			console.warn("Attempt to open an already opened relay channel!");
 			return;
@@ -146,8 +154,8 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 		this.ch.addEventListener("open", () => { this.onChannelOpen(); });
 	}
 
-	send<T>(msg: RelayMessage<T>) {
-		if (this.state !== RTCManagementChannelState.OPEN) {
+	send<T>(msg: ManagementMessage<T>): void {
+		if (this.state !== RTCManagementChannelState.OPEN || this.ch === null) {
 			console.warn("Attempt to send a message on an unavailable connection!");
 			return;
 		}
@@ -157,6 +165,6 @@ export default class RTCManagementChannel extends CustomEventTarget<RTCManagemen
 			return;
 		}
 
-		this.ch!.send(JSON.stringify(msg));
+		this.ch.send(JSON.stringify(msg));
 	}
 }

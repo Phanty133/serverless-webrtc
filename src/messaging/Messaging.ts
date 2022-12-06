@@ -10,7 +10,7 @@ export default class Messaging extends EventTarget {
 		this.initListener();
 	}
 
-	private initListener() {
+	private initListener(): void {
 		window.addEventListener("message", (e) => {
 			let data: MessageData;
 
@@ -27,8 +27,10 @@ export default class Messaging extends EventTarget {
 		});
 	}
 
-	send(target: string, data: any) {
-		window.top!.postMessage(JSON.stringify({
+	send(target: string, data: any): void {
+		if (window.top === null) return;
+
+		window.top.postMessage(JSON.stringify({
 			source: this.id,
 			target,
 			data

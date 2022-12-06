@@ -1,25 +1,35 @@
 import { v4 as uuidv4 } from "uuid";
-import { ArrayBufferUtils } from "../../utils/ArrayBufferUtils";
-import CustomEventTarget from "../../events/CustomEventTarget";
+import * as ArrayBufferUtils from "../../utils/ArrayBufferUtils";
+import CustomEventTarget, { CustomEventList } from "../../events/CustomEventTarget";
 import RTCNetworkNodeStateEvent from "./RTCNetworkNodeStateEvent";
 import RTCNodeKeygenEvent from "./RTCNodeKeygenEvent";
+import RTCNodeInitEvent from "./RTCNodeInitEvent";
 
 export type UUIDv4 = string;
 
-type RTCNodeEvents = {
-	"state": RTCNetworkNodeStateEvent,
+export interface RTCPeerInfo {
+	pubkey: string
+}
+
+interface RTCNodeEvents extends CustomEventList {
+	"state": RTCNetworkNodeStateEvent
 	"keygen": RTCNodeKeygenEvent
-};
+	"init": RTCNodeInitEvent
+}
 
 export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
-	static KEY_ALG = "RSASSA-PKCS1-v1_5";
+	static readonly KEY_ALG = "RSASSA-PKCS1-v1_5";
+	static readonly KEY_FORMAT = "spki";
 
 	private _id: UUIDv4;
 	private _pubkey: CryptoKey | null = null;
 	private keypair: CryptoKeyPair | null = null;
 
-	get id() { return this._id; }
-	get pubkey() {
+	get id(): UUIDv4 {
+		return this._id;
+	}
+
+	get pubkey(): CryptoKey | null {
 		return this.keypair === null ? this._pubkey : this.keypair.publicKey;
 	}
 
@@ -27,24 +37,33 @@ export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
 		super();
 		this._id = id === null ? uuidv4() : id;
 
-		if (genKeys) this.genKeys();
+		if (genKeys) {
+			this.genKeys().catch((err: string) => console.warn(`Error generating keys (${err})`));
+		}
 	}
 
-	setId(newId: UUIDv4) {
+	setId(newId: UUIDv4): void {
 		this._id = newId;
 	}
 
-	async setPublicKey(key: string) {
+	async setPublicKey(key: string): Promise<void> {
+		const hexbuf = ArrayBufferUtils.hex2buf(key);
+
+		if (hexbuf === null) {
+			console.warn(`Attempt to set invalid public key (${key})`);
+			return;
+		}
+
 		this._pubkey = await window.crypto.subtle.importKey(
-			"raw",
-			ArrayBufferUtils.hex2buf(key),
+			RTCNode.KEY_FORMAT,
+			hexbuf,
 			{ name: RTCNode.KEY_ALG, hash: "SHA-256" },
-			false,
+			true,
 			["verify"]
 		);
 	}
-	
-	async genKeys() {
+
+	async genKeys(): Promise<void> {
 		this.keypair = await window.crypto.subtle.generateKey(
 			{
 				name: RTCNode.KEY_ALG,
@@ -59,10 +78,10 @@ export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
 		this.dispatchEvent<"keygen">(new RTCNodeKeygenEvent());
 	}
 
-	async sign(data: string) {
+	async sign(data: string): Promise<string | null> {
 		if (this.keypair === null) {
 			console.warn("Attempt to sign data before generating a key pair!");
-			return;
+			return null;
 		}
 
 		const sig = await window.crypto.subtle.sign(
@@ -74,26 +93,49 @@ export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
 		return ArrayBufferUtils.buf2hex(sig);
 	}
 
-	async verify(sig: string, data: string) {
+	async verify(sig: string, data: string): Promise<boolean | null> {
 		if (this.pubkey === null) {
 			console.warn("Attempt to verify data before generating or assigning a public key!");
-			return;
+			return null;
 		}
 
-		return window.crypto.subtle.verify(
+		const sigBuf = ArrayBufferUtils.hex2buf(sig);
+
+		if (sigBuf === null) {
+			console.warn(`Attempt to verify invalid signature (${sig})`);
+			return null;
+		}
+
+		return await window.crypto.subtle.verify(
 			RTCNode.KEY_ALG,
 			this.pubkey,
-			ArrayBufferUtils.str2buf(sig),
+			sigBuf,
 			ArrayBufferUtils.str2buf(data)
 		);
 	}
 
-	async exportPubKey() {
+	async exportPubKey(): Promise<string | null> {
 		if (this.pubkey === null) {
 			console.warn("Attempt to export pubkey before generating or assigning a public key!");
-			return;
+			return null;
 		}
 
-		return ArrayBufferUtils.buf2hex(await window.crypto.subtle.exportKey("raw", this.pubkey));
+		const key = await window.crypto.subtle.exportKey(RTCNode.KEY_FORMAT, this.pubkey);
+
+		return ArrayBufferUtils.buf2hex(key);
+	}
+
+	async exportPeerInfo(): Promise<RTCPeerInfo> {
+		const pubkey = await this.exportPubKey();
+
+		if (pubkey === null) {
+			throw new TypeError("Pubkey not set or generated!");
+		}
+
+		return { pubkey };
+	}
+
+	async importPeerInfo(info: RTCPeerInfo): Promise<void> {
+		await this.setPublicKey(info.pubkey);
 	}
 }

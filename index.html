@@ -21,14 +21,14 @@
 	<iframe src="http://localhost:5500/peer.html?id=0" id="iframe0"></iframe>
 	<iframe src="http://localhost:5500/peer.html?id=1" id="iframe1"></iframe>
 	<iframe src="http://localhost:5500/peer.html?id=2" id="iframe2"></iframe>
-	<iframe src="http://localhost:5500/peer.html?id=3" id="iframe3"></iframe>
+	<!-- <iframe src="http://localhost:5500/peer.html?id=3" id="iframe3"></iframe> -->
 
 	<script src="./msgHandler.js"></script>
 	<script>
 		const iframe0 = document.getElementById("iframe0");
 		const iframe1 = document.getElementById("iframe1");
 		const iframe2 = document.getElementById("iframe2");
-		const iframe3 = document.getElementById("iframe3");
+		// const iframe3 = document.getElementById("iframe3");
 
 		setTimeout(() => {
 			const con1 = { // connect 0 to 1
@@ -52,8 +52,8 @@
 				target: "0",
 			};
 			
-			// iframe0.contentWindow.postMessage(JSON.stringify(con1), "*");
-			// iframe0.contentWindow.postMessage(JSON.stringify(con2), "*");
+			iframe0.contentWindow.postMessage(JSON.stringify(con1), "*");
+			iframe0.contentWindow.postMessage(JSON.stringify(con2), "*");
 			// iframe0.contentWindow.postMessage(JSON.stringify(con3), "*");
 			// iframe1.contentWindow.postMessage(JSON.stringify(con3), "*");
 

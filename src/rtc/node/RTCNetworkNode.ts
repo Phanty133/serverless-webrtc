@@ -1,8 +1,9 @@
 import RTCConnection, { RTCConnectionHandlers } from "../connection/RTCConnection";
-import RTCManagementChannel from "../management/RTCManagementChannel";
+import RTCManagementChannel, { ManagementMessageType } from "../management/RTCManagementChannel";
 import RTCNetwork from "../network/RTCNetwork";
 import RTCNetworkNodeStateEvent from "./RTCNetworkNodeStateEvent";
-import RTCNode, { UUIDv4 } from "./RTCNode";
+import RTCNode, { RTCPeerInfo, UUIDv4 } from "./RTCNode";
+import RTCNodeInitEvent from "./RTCNodeInitEvent";
 
 export enum RTCNetworkNodeState {
 	NEW,
@@ -18,7 +19,7 @@ export default class RTCNetworkNode extends RTCNode {
 
 	private _state: RTCNetworkNodeState;
 
-	get state() {
+	get state(): RTCNetworkNodeState {
 		return this._state;
 	}
 
@@ -31,21 +32,31 @@ export default class RTCNetworkNode extends RTCNode {
 		this.initListeners();
 	}
 
-	private initListeners() {
+	private initListeners(): void {
 		this.con.addEventListener("state", (ev) => { this.onConnectionStateChange(); });
+		this.management.addEventListener("message", (ev) => {
+			if (ev.detail.type !== ManagementMessageType.PEER_INFO) return;
+
+			void this.handlePeerInfoMessage(ev.detail.payload);
+		});
 	}
 
-	private onConnectionStateChange() {
+	private async handlePeerInfoMessage(info: RTCPeerInfo): Promise<void> {
+		await this.importPeerInfo(info);
+		this.dispatchEvent<"init">(new RTCNodeInitEvent());
+	}
+
+	private onConnectionStateChange(): void {
 		// They're the same for now
 		this.setState(this.con.state as unknown as RTCNetworkNodeState);
 	}
 
-	private setState(newState: RTCNetworkNodeState) {
+	private setState(newState: RTCNetworkNodeState): void {
 		this._state = newState;
 		this.dispatchEvent(new RTCNetworkNodeStateEvent(this.state));
 	}
 
-	ensureManagementChannel() {
+	ensureManagementChannel(): void {
 		if (this.management.ch === null) {
 			this.management.open();
 		}

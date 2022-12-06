@@ -1,9 +1,9 @@
-import CustomEventTarget from "../../events/CustomEventTarget";
+import CustomEventTarget, { CustomEventList } from "../../events/CustomEventTarget";
 import RTCConnectionStateEvent from "./RTCConnectionStateEvent";
 
 export interface RTCConnectionHandlers {
-	sendSessionCb: (session: RTCSessionDescription) => void;
-	sendCandidateCb: (candidate: RTCIceCandidate) => void;
+	sendSessionCb: (session: RTCSessionDescription) => void
+	sendCandidateCb: (candidate: RTCIceCandidate) => void
 };
 
 export enum RTCConnectionState {
@@ -13,18 +13,20 @@ export enum RTCConnectionState {
 	BROKEN
 };
 
-type RTCConnectionEvents = { "state": RTCConnectionStateEvent };
+interface RTCConnectionEvents extends CustomEventList {
+	"state": RTCConnectionStateEvent
+}
 
 export default class RTCConnection extends CustomEventTarget<RTCConnectionEvents> {
 	readonly con: RTCPeerConnection;
 
-	private handlers: RTCConnectionHandlers;
+	private readonly handlers: RTCConnectionHandlers;
 
 	private makingOffer = false;
 
 	private _state: RTCConnectionState;
 
-	get state() {
+	get state(): RTCConnectionState {
 		return this._state;
 	}
 
@@ -35,25 +37,26 @@ export default class RTCConnection extends CustomEventTarget<RTCConnectionEvents
 		this.con = new RTCPeerConnection(config);
 		this.handlers = handlers;
 
-		this.initConnection();
+		this.initConnection().catch((err: string) => { console.warn(`Failed to init connection (${err})`); });
 	}
-	
-	private async initConnection() {
-		this.con.addEventListener("negotiationneeded", () => { this.onNegotiationNeeded(); });
+
+	private async initConnection(): Promise<void> {
+		this.con.addEventListener("negotiationneeded", () => { void this.onNegotiationNeeded(); });
 		this.con.addEventListener("icecandidate", (e) => { this.onIceCandidate(e); });
 		this.con.addEventListener("iceconnectionstatechange", () => { this.onIceStateChange(); });
 		this.con.addEventListener("connectionstatechange", () => { this.onConnectionStateChange(); });
 	}
 
-	private isPolite() {
+	private isPolite(): boolean {
 		return !this.makingOffer;
 	}
 
-	private async onNegotiationNeeded() {
+	private async onNegotiationNeeded(): Promise<void> {
 		try {
 			this.makingOffer = true;
 			await this.con.setLocalDescription();
 
+			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			this.handlers.sendSessionCb(this.con.localDescription!);
 		} catch (e) {
 			console.error(e);
@@ -62,19 +65,19 @@ export default class RTCConnection extends CustomEventTarget<RTCConnectionEvents
 		}
 	}
 
-	private onIceCandidate(e: RTCPeerConnectionIceEvent) {
-		if (e.candidate) {
+	private onIceCandidate(e: RTCPeerConnectionIceEvent): void {
+		if (e.candidate != null) {
 			this.handlers.sendCandidateCb(e.candidate);
 		}
 	}
-	
-	private onIceStateChange() {
+
+	private onIceStateChange(): void {
 		if (this.con.iceConnectionState === "failed") {
 			this.con.restartIce();
 		}
 	}
 
-	private onConnectionStateChange() {
+	private onConnectionStateChange(): void {
 		switch (this.con.connectionState) {
 			case "connecting":
 				this.setState(RTCConnectionState.CONNECTING);
@@ -90,13 +93,13 @@ export default class RTCConnection extends CustomEventTarget<RTCConnectionEvents
 		}
 	}
 
-	private setState(newState: RTCConnectionState) {
+	private setState(newState: RTCConnectionState): void {
 		this._state = newState;
 		this.dispatchEvent(new RTCConnectionStateEvent(this.state));
 	}
 
-	async addIceCandidate(candidate: RTCIceCandidateInit) {
-		if (!this.con) {
+	async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+		if (this.con === null) {
 			console.warn("Attempt to add ICE candidate to uninitialized connection!");
 			return;
 		}
@@ -108,10 +111,10 @@ export default class RTCConnection extends CustomEventTarget<RTCConnectionEvents
 		}
 	}
 
-	async handleSessionDesc(desc: RTCSessionDescriptionInit) {
+	async handleSessionDesc(desc: RTCSessionDescriptionInit): Promise<void> {
 		const offerCollision = (desc.type === "offer") && (this.makingOffer || this.con.signalingState !== "stable");
 		const ignoreOffer = !this.isPolite() && offerCollision;
-		
+
 		if (ignoreOffer) return;
 
 		await this.con.setRemoteDescription(desc);
@@ -120,11 +123,12 @@ export default class RTCConnection extends CustomEventTarget<RTCConnectionEvents
 			await this.con.setLocalDescription();
 
 			// Send answer
+			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			this.handlers.sendSessionCb(this.con.localDescription!);
 		}
 	}
 
-	isOpen() {
+	isOpen(): boolean {
 		return this.con.connectionState === "connected";
 	}
 }

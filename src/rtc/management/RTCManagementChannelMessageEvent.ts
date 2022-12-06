@@ -1,7 +1,7 @@
-import { RelayMessage } from "./RTCManagementChannel";
+import { ManagementMessage } from "./RTCManagementChannel";
 
-export default class RTCManagementChannelMessageEvent extends CustomEvent<RelayMessage<any>> {
-	constructor(message: RelayMessage<any>) {
+export default class RTCManagementChannelMessageEvent extends CustomEvent<ManagementMessage<any>> {
+	constructor(message: ManagementMessage<any>) {
 		super("message", { detail: message });
 	}
 }
