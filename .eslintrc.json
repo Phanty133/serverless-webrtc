@@ -16,6 +16,7 @@
 		"indent": ["error", "tab", { "SwitchCase": 1 }],
 		"no-tabs": ["error", { "allowIndentationTabs": true }],
 		"semi": ["error", "always"],
+        "space-before-function-paren": ["error", "never"],
         "@typescript-eslint/indent": ["error", "tab", { "SwitchCase": 1 }],
         "@typescript-eslint/semi": ["error", "always"],
         "@typescript-eslint/quotes": ["error", "double"],
