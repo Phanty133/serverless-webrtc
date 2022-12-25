@@ -9,3 +9,7 @@ export default async function getXXHashInstance(): Promise<XXHashAPI> {
 
 	return xxhashInstance;
 }
+
+export function clearXXHashInstance(): void {
+	xxhashInstance = null;
+}
