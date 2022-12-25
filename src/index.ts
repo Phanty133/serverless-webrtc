@@ -64,20 +64,20 @@ async function main(): Promise<void> {
 	const decisionManager = new RTCDecisionManager<DecisionData>(netw);
 	const correctData = { arg1: "Hello", arg2: 69 };
 
-	const acceptHandler = async(decisionData: DecisionData["testdecision"]): Promise<void> => {
+	const acceptHandler = async (decisionData: DecisionData["testdecision"]): Promise<void> => {
 		console.log(`Local decision accepted (Local: ${netw.local.id})`);
 		console.log(decisionData);
 	};
 
-	const declineHandler = async(): Promise<void> => {
+	const declineHandler = async (): Promise<void> => {
 		console.log("DECISION DECLINED LOL");
 	};
 
-	const validityHandler = async(decisionData: DecisionData["testdecision"]): Promise<boolean> => {
+	const validityHandler = async (decisionData: DecisionData["testdecision"]): Promise<boolean> => {
 		return decisionData.arg1 === correctData.arg1 && decisionData.arg2 === correctData.arg2;
 	};
 
-	const decisionHandler = async(decisionData: DecisionData["testdecision"], node: string): Promise<void> => {
+	const decisionHandler = async (decisionData: DecisionData["testdecision"], node: string): Promise<void> => {
 		console.log(`Foreign decision accepted (Node: ${node}, Local: ${netw.local.id})`);
 		console.log(decisionData);
 	};

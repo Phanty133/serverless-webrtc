@@ -5,6 +5,8 @@ export function buf2hex(buffer: ArrayBuffer): string { // buffer is an ArrayBuff
 }
 
 export function hex2buf(hex: string): Uint8Array | null {
+	if (hex === "") return new Uint8Array();
+
 	const match = hex.match(/[\da-f]{2}/gi);
 
 	if (match === null) {
