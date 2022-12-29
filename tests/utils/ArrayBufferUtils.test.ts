@@ -29,7 +29,7 @@ describe("ArrayBufferUtils", () => {
 			const result = hex2buf(hex);
 			const expected = new Uint8Array();
 
-			expect(result).toStrictEqual(expected);
+			expect(result?.buffer).toEqual(expected.buffer);
 		});
 
 		test("Valid hex", async () => {
@@ -38,7 +38,7 @@ describe("ArrayBufferUtils", () => {
 			const result = hex2buf(hex);
 			const expected = new Uint8Array([171, 205, 239, 19, 55]);
 
-			expect(result).toStrictEqual(expected);
+			expect(result?.buffer).toEqual(expected.buffer);
 		});
 
 		test("Invalid hex", async () => {
@@ -58,7 +58,7 @@ describe("ArrayBufferUtils", () => {
 			const result = str2buf(str);
 			const expected = new Uint8Array();
 
-			expect(result).toStrictEqual(expected);
+			expect(result.buffer).toEqual(expected.buffer);
 		});
 
 		test("ASCII-only string", async () => {
@@ -67,7 +67,7 @@ describe("ArrayBufferUtils", () => {
 			const result = str2buf(str);
 			const expected = new Uint8Array([97, 98, 99, 100, 101, 102]);
 
-			expect(result).toStrictEqual(expected);
+			expect(result.buffer).toEqual(expected.buffer);
 		});
 
 		test("Unicode string", async () => {
@@ -76,7 +76,7 @@ describe("ArrayBufferUtils", () => {
 			const result = str2buf(str);
 			const expected = new Uint8Array([97, 98, 240, 159, 151, 191, 240, 159, 151, 191]);
 
-			expect(result).toStrictEqual(expected);
+			expect(result.buffer).toEqual(expected.buffer);
 		});
 	});
 });

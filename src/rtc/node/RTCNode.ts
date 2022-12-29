@@ -23,6 +23,7 @@ export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
 
 	private _id: UUIDv4;
 	private _pubkey: CryptoKey | null = null;
+	private _generatingKeys = false;
 	private keypair: CryptoKeyPair | null = null;
 
 	get id(): UUIDv4 {
@@ -31,6 +32,10 @@ export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
 
 	get pubkey(): CryptoKey | null {
 		return this.keypair === null ? this._pubkey : this.keypair.publicKey;
+	}
+
+	get generatingKeys(): boolean {
+		return this._generatingKeys;
 	}
 
 	constructor(id: UUIDv4 | null = null, genKeys = false) {
@@ -64,6 +69,8 @@ export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
 	}
 
 	async genKeys(): Promise<void> {
+		this._generatingKeys = true;
+
 		this.keypair = await window.crypto.subtle.generateKey(
 			{
 				name: RTCNode.KEY_ALG,
@@ -74,6 +81,8 @@ export default class RTCNode extends CustomEventTarget<RTCNodeEvents> {
 			true,
 			["sign", "verify"]
 		);
+
+		this._generatingKeys = false;
 
 		this.dispatchEvent<"keygen">(new RTCNodeKeygenEvent());
 	}
