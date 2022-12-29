@@ -3,12 +3,12 @@ export default class Queue<T> {
 
 	get length(): number { return this.data.length; }
 
-	get first(): T { return this.data[0]; }
+	get first(): T | null { return this.data[0] ?? null; }
 
 	get isEmpty(): boolean { return this.length === 0; }
 
 	constructor(data: T[] = []) {
-		this.data = data;
+		this.data = [...data];
 	}
 
 	// Deletes the first element and returns it
